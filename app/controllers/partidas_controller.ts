@@ -37,20 +37,22 @@ export default class PartidasController {
   }
 
   async index({ response }: HttpContext) {
-    try {
-      const partidas = await Partida.query().where('estado', 'esperando')
+  try {
+    const partidas = await Partida.query().where('estado', 'esperando')
 
-      return response.json({
-        message: 'Listado de partidas exitoso',
-        partidas: partidas,
-      })
-    } catch (error) {
-      return response.status(400).json({
-        message: 'Error al obtener listado de partidas',
-        errors: error.messages || error.message,
-      })
-    }
+    return response.json({
+      success: true,
+      data: partidas,
+    })
+  } catch (error) {
+    return response.status(400).json({
+      success: false,
+      message: 'Error al obtener listado de partidas',
+      errors: error.messages || error.message,
+    })
   }
+}
+
 
   async salaEspera({ response, params, auth }: HttpContext) {
     try {
@@ -245,11 +247,12 @@ export default class PartidasController {
         })
       }
 
-      if (partida.estado !== 'en_curso') {
-        return response.status(400).json({
-          message: 'La partida no está en curso',
-        })
-      }
+      if (partida.estado !== 'en_curso' && partida.estado !== 'finalizada') {
+          return response.status(400).json({
+            message: 'La partida no está activa o finalizada',
+          })
+        }
+
 
       if (!partida.jugador_2_id) {
         return response.status(400).json({

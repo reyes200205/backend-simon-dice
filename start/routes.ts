@@ -23,7 +23,7 @@ router.group(() => {
   router.post('/partidas', [PartidasController, 'create'])
   router.get('/partidas', [PartidasController, 'index'])
   router.get('/sala-espera/:id', [PartidasController, 'salaEspera'])
-  router.get('verificar-estado/:id', [PartidasController, 'verificarEstado'])
+  router.get('/verificar-estado/:id', [PartidasController, 'verificarEstado'])
   router.post('/unirse-partida/:id', [PartidasController, 'unirse'])
   router.get('/partida/:id', [PartidasController, 'obtenerJuego'])
   router.post('/disparo/:id', [PartidasController, 'jugarColor'])
