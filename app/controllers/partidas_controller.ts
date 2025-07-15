@@ -19,7 +19,7 @@ export default class PartidasController {
         jugador_1_id: user.id,
         jugador_2_id: null,
         estado: 'esperando',
-        turno_actual: 1,
+        turno_actual: user.id,
         ganador_id: null,
       })
 
@@ -38,11 +38,15 @@ export default class PartidasController {
 
   async index({ response }: HttpContext) {
   try {
-    const partidas = await Partida.query().where('estado', 'esperando')
+
+    const jugador = await Partida.query().where('estado', 'esperando').preload('jugador1', (query) => {
+      query.select('id', 'fullName', 'email')
+    })
+   
 
     return response.json({
       success: true,
-      data: partidas,
+      data: jugador,
     })
   } catch (error) {
     return response.status(400).json({
@@ -127,22 +131,12 @@ export default class PartidasController {
 
       if (totalJugadores >= 2 && partida.estado === 'esperando') {
         partida.estado = 'en_curso'
-
-        partida.turno_actual = 1
+        partida.turno_actual = partida.jugador_1_id
         partida.ganador_id = null
         await partida.save()
       }
 
       await partida.refresh()
-
-      let jugadorTurno = null
-      if (partida.estado === 'en_curso') {
-        if (partida.turno_actual === 1) {
-          jugadorTurno = partida.jugador_1_id
-        } else {
-          jugadorTurno = partida.jugador_2_id
-        }
-      }
 
       return response.json({
         message: 'Estado verificado exitosamente',
@@ -210,7 +204,7 @@ export default class PartidasController {
 
       if (nuevoTotalJugadores >= 2) {
         partida.estado = 'en_curso'
-        partida.turno_actual = 1
+        partida.turno_actual = partida.jugador_1_id
         await partida.save()
       }
 
