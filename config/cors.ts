@@ -8,10 +8,15 @@ import { defineConfig } from '@adonisjs/cors'
  */
 const corsConfig = defineConfig({
   enabled: true,
-  origin: true,
-  methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE'],
+  origin: [
+    'https://front-angular-bn.vercel.app',
+    'https://front-angular-bn-git-main-alejandro-renteria-reyes-projects.vercel.app',
+    'http://localhost:4200',
+    'https://front-angular-bn.vercel.app'
+  ],
+  methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'OPTIONS'], 
   headers: true,
-  exposeHeaders: [],
+  exposeHeaders: ['Authorization'], 
   credentials: true,
   maxAge: 90,
 })
