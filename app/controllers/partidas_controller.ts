@@ -23,7 +23,6 @@ export default class PartidasController {
         ganador_id: null,
       })
 
-      console.log(typeof partida.secuencia)
       return response.json({
         message: 'Partida creada exitosamente',
         partida: partida,
@@ -37,26 +36,25 @@ export default class PartidasController {
   }
 
   async index({ response }: HttpContext) {
-  try {
+    try {
+      const jugador = await Partida.query()
+        .where('estado', 'esperando')
+        .preload('jugador1', (query) => {
+          query.select('id', 'fullName', 'email')
+        })
 
-    const jugador = await Partida.query().where('estado', 'esperando').preload('jugador1', (query) => {
-      query.select('id', 'fullName', 'email')
-    })
-   
-
-    return response.json({
-      success: true,
-      data: jugador,
-    })
-  } catch (error) {
-    return response.status(400).json({
-      success: false,
-      message: 'Error al obtener listado de partidas',
-      errors: error.messages || error.message,
-    })
+      return response.json({
+        success: true,
+        data: jugador,
+      })
+    } catch (error) {
+      return response.status(400).json({
+        success: false,
+        message: 'Error al obtener listado de partidas',
+        errors: error.messages || error.message,
+      })
+    }
   }
-}
-
 
   async salaEspera({ response, params, auth }: HttpContext) {
     try {
@@ -242,11 +240,10 @@ export default class PartidasController {
       }
 
       if (partida.estado !== 'en_curso' && partida.estado !== 'finalizada') {
-          return response.status(400).json({
-            message: 'La partida no está activa o finalizada',
-          })
-        }
-
+        return response.status(400).json({
+          message: 'La partida no está activa o finalizada',
+        })
+      }
 
       if (!partida.jugador_2_id) {
         return response.status(400).json({
@@ -362,157 +359,211 @@ export default class PartidasController {
   }
 
   async jugarColor({ params, request, response, auth }: HttpContext) {
-  try {
-    const payload = await request.validateUsing(jugarColorValidator)
-    const user = await auth.authenticate()
-    const partida = await Partida.findOrFail(params.id)
+    try {
+      const payload = await request.validateUsing(jugarColorValidator)
+      const user = await auth.authenticate()
+      const partida = await Partida.findOrFail(params.id)
 
-    if (partida.estado !== 'en_curso') {
-      return response.status(400).json({
-        message: 'La partida no está en curso',
-      })
-    }
-
-    if (partida.turno_actual !== user.id) {
-      return response.status(403).json({
-        message: 'No es tu turno',
-      })
-    }
-
-    
-    const coloresInvalidos = payload.secuencia.filter(
-      color => !partida.colores_disponibles.includes(color)
-    )
-
-    if (coloresInvalidos.length > 0) {
-      return response.status(400).json({
-        message: `Colores no válidos: ${coloresInvalidos.join(', ')}`,
-      })
-    }
-
-    const secuenciaActual = partida.secuencia
-    const secuenciaJugador = payload.secuencia
-
-    let juegoTerminado = false
-    let colorCorrecto = true
-    let mensaje = ''
-    let nuevoColorAñadido = null
-
-    if (secuenciaActual.length === 0) {
-      if (secuenciaJugador.length === 1) {
-        partida.secuencia = secuenciaJugador
-        nuevoColorAñadido = secuenciaJugador[0]
-        mensaje = 'Has añadido el primer color a la secuencia.'
-      } else {
+      if (partida.estado !== 'en_curso') {
         return response.status(400).json({
-          message: 'Debes añadir exactamente un color para empezar',
+          message: 'La partida no está en curso',
         })
       }
-    }
-    
-    else if (secuenciaJugador.length === secuenciaActual.length) {
-      const esCorrecta = secuenciaJugador.every((color, index) => 
-        color === secuenciaActual[index]
+
+      if (partida.turno_actual !== user.id) {
+        return response.status(403).json({
+          message: 'No es tu turno',
+        })
+      }
+
+      const coloresInvalidos = payload.secuencia.filter(
+        (color) => !partida.colores_disponibles.includes(color)
       )
-      
-      if (esCorrecta) {
-        mensaje = 'Has repetido correctamente la secuencia. Ahora añade un nuevo color.'
+
+      if (coloresInvalidos.length > 0) {
+        return response.status(400).json({
+          message: `Colores no válidos: ${coloresInvalidos.join(', ')}`,
+        })
+      }
+
+      const secuenciaActual = partida.secuencia
+      const secuenciaJugador = payload.secuencia
+
+      let juegoTerminado = false
+      let colorCorrecto = true
+      let mensaje = ''
+      let nuevoColorAñadido = null
+
+      // Caso especial: primera jugada
+      if (secuenciaActual.length === 0) {
+        if (secuenciaJugador.length === 1) {
+          partida.secuencia = secuenciaJugador
+          nuevoColorAñadido = secuenciaJugador[0]
+          mensaje = 'Has añadido el primer color a la secuencia.'
+        } else {
+          return response.status(400).json({
+            message: 'Debes añadir exactamente un color para empezar',
+          })
+        }
       } else {
-        colorCorrecto = false
-        mensaje = 'Secuencia incorrecta. Has perdido la partida.'
-        juegoTerminado = true
-        partida.estado = 'finalizada'
-        const oponenteId = partida.jugador_1_id === user.id ? partida.jugador_2_id : partida.jugador_1_id
-        partida.ganador_id = oponenteId
-      }
-    }
-    
-    else if (secuenciaJugador.length === secuenciaActual.length + 1) {
-    
-      const secuenciaCorrecta = secuenciaActual.every((color, index) => 
-        color === secuenciaJugador[index]
-      )
-      
-      if (secuenciaCorrecta) {
-        partida.secuencia = secuenciaJugador
-        nuevoColorAñadido = secuenciaJugador[secuenciaJugador.length - 1]
-        mensaje = 'Has repetido la secuencia y añadido un nuevo color.'
-      } else {
-        colorCorrecto = false
-        mensaje = 'Secuencia incorrecta. Has perdido la partida.'
-        juegoTerminado = true
-        partida.estado = 'finalizada'
-        const oponenteId = partida.jugador_1_id === user.id ? partida.jugador_2_id : partida.jugador_1_id
-        partida.ganador_id = oponenteId
-      }
-    }
-    else {
-      return response.status(400).json({
-        message: 'La secuencia debe tener la misma longitud que la actual, o una más para añadir un nuevo color',
-      })
-    }
+        // Validar si la secuencia es correcta (puede ser más corta, igual o más larga)
 
-    if (!juegoTerminado && nuevoColorAñadido) {
-      if (partida.jugador_1_id !== null && partida.jugador_2_id !== null) {
-        partida.turno_actual =
-          partida.jugador_1_id === user.id ? partida.jugador_2_id! : partida.jugador_1_id!
-      }
-    }
+        // Caso 1: Secuencia más corta que la actual (ERROR)
+        if (secuenciaJugador.length < secuenciaActual.length) {
+          colorCorrecto = false
+          mensaje = 'Secuencia incompleta. Has perdido la partida.'
+          juegoTerminado = true
+          partida.estado = 'finalizada'
+          const oponenteId =
+            partida.jugador_1_id === user.id ? partida.jugador_2_id : partida.jugador_1_id
+          partida.ganador_id = oponenteId
+        }
 
-    await partida.save()
+        // Caso 2: Secuencia igual a la actual (debe repetir exactamente)
+        else if (secuenciaJugador.length === secuenciaActual.length) {
+          const esCorrecta = secuenciaJugador.every(
+            (color, index) => color === secuenciaActual[index]
+          )
 
-    const oponenteId =
-      partida.jugador_1_id === user.id ? partida.jugador_2_id : partida.jugador_1_id
-    const oponente = await User.findOrFail(oponenteId!)
-
-    const responseData = {
-      success: true,
-      resultado: {
-        secuenciaJugada: secuenciaJugador,
-        secuenciaCorrecta: colorCorrecto,
-        mensaje: mensaje,
-        nuevoColorAñadido: nuevoColorAñadido,
-      },
-      estado: {
-        nivelActual: partida.secuencia.length,
-        juegoTerminado: juegoTerminado,
-        esMiTurno: !juegoTerminado && partida.turno_actual === user.id,
-        mensaje: mensaje,
-        secuenciaActual: partida.secuencia,
-      },
-      turno: {
-        turnoActual: juegoTerminado ? null : partida.turno_actual,
-        siguienteJugador: juegoTerminado ? null : oponente.fullName,
-      },
-      ganador: juegoTerminado
-        ? {
-            id: partida.ganador_id,
-            esGanador: partida.ganador_id === user.id,
-            mensaje:
-              partida.ganador_id === user.id
-                ? '¡Felicidades! Has ganado la partida.'
-                : `El jugador ${oponente.fullName} ha ganado la partida.`,
+          if (esCorrecta) {
+            mensaje = 'Has repetido correctamente la secuencia. Ahora añade un nuevo color.'
+          } else {
+            colorCorrecto = false
+            mensaje = 'Secuencia incorrecta. Has perdido la partida.'
+            juegoTerminado = true
+            partida.estado = 'finalizada'
+            const oponenteId =
+              partida.jugador_1_id === user.id ? partida.jugador_2_id : partida.jugador_1_id
+            partida.ganador_id = oponenteId
           }
-        : null,
-    }
+        }
 
-    return response.json(responseData)
-  } catch (error) {
-    console.error('Error al jugar color:', error)
+        // Caso 3: Secuencia con exactamente un color más (repetir + añadir)
+        else if (secuenciaJugador.length === secuenciaActual.length + 1) {
+          const secuenciaCorrecta = secuenciaActual.every(
+            (color, index) => color === secuenciaJugador[index]
+          )
 
-    if (error.messages) {
-      return response.status(400).json({
+          if (secuenciaCorrecta) {
+            partida.secuencia = secuenciaJugador
+            nuevoColorAñadido = secuenciaJugador[secuenciaJugador.length - 1]
+            mensaje = 'Has repetido la secuencia y añadido un nuevo color.'
+          } else {
+            colorCorrecto = false
+            mensaje = 'Secuencia incorrecta. Has perdido la partida.'
+            juegoTerminado = true
+            partida.estado = 'finalizada'
+            const oponenteId =
+              partida.jugador_1_id === user.id ? partida.jugador_2_id : partida.jugador_1_id
+            partida.ganador_id = oponenteId
+          }
+        }
+
+        // Caso 4: Secuencia demasiado larga (más de un color extra)
+        else {
+          colorCorrecto = false
+          mensaje = 'Has añadido demasiados colores. Has perdido la partida.'
+          juegoTerminado = true
+          partida.estado = 'finalizada'
+          const oponenteId =
+            partida.jugador_1_id === user.id ? partida.jugador_2_id : partida.jugador_1_id
+          partida.ganador_id = oponenteId
+        }
+      }
+
+      // Cambiar turno solo si se añadió un nuevo color y el juego no terminó
+      if (!juegoTerminado && nuevoColorAñadido) {
+        if (partida.jugador_1_id !== null && partida.jugador_2_id !== null) {
+          partida.turno_actual =
+            partida.jugador_1_id === user.id ? partida.jugador_2_id! : partida.jugador_1_id!
+        }
+      }
+
+      await partida.save()
+
+      const oponenteId =
+        partida.jugador_1_id === user.id ? partida.jugador_2_id : partida.jugador_1_id
+      const oponente = await User.findOrFail(oponenteId!)
+
+      const responseData = {
+        success: true,
+        resultado: {
+          secuenciaJugada: secuenciaJugador,
+          secuenciaCorrecta: colorCorrecto,
+          mensaje: mensaje,
+          nuevoColorAñadido: nuevoColorAñadido,
+        },
+        estado: {
+          nivelActual: partida.secuencia.length,
+          juegoTerminado: juegoTerminado,
+          esMiTurno: !juegoTerminado && partida.turno_actual === user.id,
+          mensaje: mensaje,
+          secuenciaActual: partida.secuencia,
+        },
+        turno: {
+          turnoActual: juegoTerminado ? null : partida.turno_actual,
+          siguienteJugador: juegoTerminado ? null : oponente.fullName,
+        },
+        ganador: juegoTerminado
+          ? {
+              id: partida.ganador_id,
+              esGanador: partida.ganador_id === user.id,
+              mensaje:
+                partida.ganador_id === user.id
+                  ? '¡Felicidades! Has ganado la partida.'
+                  : `El jugador ${oponente.fullName} ha ganado la partida.`,
+            }
+          : null,
+      }
+
+      return response.json(responseData)
+    } catch (error) {
+      console.error('Error al jugar color:', error)
+
+      if (error.messages) {
+        return response.status(400).json({
+          success: false,
+          error: 'Datos de entrada inválidos',
+          messages: error.messages,
+        })
+      }
+
+      return response.status(500).json({
         success: false,
-        error: 'Datos de entrada inválidos',
-        messages: error.messages,
+        error: 'Ocurrió un error inesperado',
+        message: error.message,
       })
     }
-
-    return response.status(500).json({
-      success: false,
-      error: 'Ocurrió un error inesperado',
-      message: error.message,
-    })
   }
-}
+
+  async indexPartidasUser({ response, auth }: HttpContext) {
+    try {
+      const user = await auth.authenticate()
+
+      const partidas = await Partida.query()
+        .where((query) => {
+          query.where('jugador_1_id', user.id).orWhere('jugador_2_id', user.id)
+        })
+        .where((query) => {
+          query.where('estado', 'en_curso').orWhere('estado', 'finalizada')
+        })
+        .preload('jugador1', (query) => {
+          query.select('id', 'fullName', 'email')
+        })
+        .preload('jugador2', (query) => {
+          query.select('id', 'fullName', 'email')
+        })
+
+      return response.json({
+        success: true,
+        data: partidas,
+      })
+    } catch (error) {
+      return response.status(500).json({
+        success: false,
+        error: 'Ocurrió un error inesperado',
+        message: error.message,
+      })
+    }
+  }
 }

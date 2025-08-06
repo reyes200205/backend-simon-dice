@@ -12,6 +12,7 @@ const corsConfig = defineConfig({
     'https://front-angular-bn.vercel.app',
     'https://front-angular-bn-git-main-alejandro-renteria-reyes-projects.vercel.app',
     'http://localhost:4200',
+    'https://front-simon-dice-two.vercel.app',
     'https://front-angular-bn.vercel.app'
   ],
   methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'OPTIONS'], 
